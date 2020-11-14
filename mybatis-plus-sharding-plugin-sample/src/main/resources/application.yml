@@ -1,0 +1,47 @@
+# ===================================================================
+# 基础配置
+# ===================================================================
+config:
+  db:
+    host: 39.108.61.221
+    port: 3306
+    dbname: mbp_sharding_plugin
+    username: root
+    password: a17770060561
+
+# ===================================================================
+# Spring 配置
+# ===================================================================
+spring:
+  application:
+    name: mybatis-plus-sharding-plugin-sample
+
+  # ===================================================================
+  # MySQL 配置
+  # ===================================================================
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${config.db.host}:${config.db.port}/${config.db.dbname}?useUnicode=true&characterEncoding=utf-8&useSSL=false
+    username: ${config.db.username}
+    password: ${config.db.password}
+    hikari:
+      minimum-idle: 5
+      idle-timeout: 600000
+      maximum-pool-size: 10
+      auto-commit: true
+      pool-name: MyHikariCP
+      max-lifetime: 1200000
+      connection-timeout: 30000
+      connection-test-query: SELECT 1
+
+
+# ===================================================================
+# mybatis-plus 配置
+# ===================================================================
+mybatis-plus:
+  type-aliases-package: cn.mirrorming.blog.domain
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    # 输出SQL
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
