@@ -9,7 +9,16 @@
     <version>0.2</version>
 </dependency>
 ```
-#### 使用
+#### 使用  参考 mybatis-plus-sharding-plugin-sample 内代码
+
+```java
+// 在Mapper上加上注解
+@TableSharding(tableName = "person", paramName = "id", prefixParam = "type", strategy = PersonShardingStrategy.class)
+    tableName       原表名
+    paramName       分表后缀处理参数对应实体类中的字段
+    prefixParam     前缀参数对应实体类中的字段
+    strategy        分表策略 实现 ShardingStrategy 接口
+```
 ```java
 /**
  * 插入测试，初始化数据
