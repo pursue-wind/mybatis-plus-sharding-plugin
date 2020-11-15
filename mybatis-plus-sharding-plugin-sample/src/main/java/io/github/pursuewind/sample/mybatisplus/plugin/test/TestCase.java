@@ -28,6 +28,9 @@ public class TestCase {
     @Autowired
     private DateDemoMapper dateDemoMapper;
 
+    /**
+     * 插入测试，初始化数据
+     */
     @Test
     public void initDBData() {
         IntStream.range(1, 99)
@@ -49,17 +52,21 @@ public class TestCase {
 
     @Test
     public void userMapperTest() {
-//        Stream.iterate(0, x -> new Random().nextInt(99))
-//                .limit(10)
-//                .forEach(i -> {
-//                    User user = userMapper.selectOne(Wrappers.<User>lambdaQuery().eq(User::getId, i));
-//                    System.err.println(user);
-//                });
+        Stream.iterate(0, x -> new Random().nextInt(99))
+                .limit(10)
+                .forEach(i -> {
+                    //根据分表字段自动查找
+                    User user = userMapper.selectOne(Wrappers.<User>lambdaQuery().eq(User::getId, i));
+                    System.err.println(user);
+                });
 
-//        User user = userMapper.selectById(23);
-//        System.out.println(user);
+        //根据分表字段自动查找
+        User user = userMapper.selectById(23);
+        System.out.println(user);
+
         User user2 = userMapper.selectOne(
                 Wrappers.<User>query()
+                        // 根据固定参数传入表名查找
                         .eq(ShardingStrategy.TABLE_NAME, "user_2")
                         .eq("name", "name_22")
         );
@@ -68,23 +75,25 @@ public class TestCase {
 
     @Test
     public void personMapperTest() {
-//        Stream.iterate(0, x -> new Random().nextInt(99))
-//                .limit(10)
-//                .forEach(i -> {
-//                    int type = (i & 1) == 0 ? 1 : 2;
-//
-//                    Person person = personMapper.selectOne(
-//                            Wrappers.<Person>lambdaQuery()
-//                                    .eq(Person::getId, i)
-//                                    .eq(Person::getType, "type" + type));
-//                    System.err.println(person);
-//                });
+        Stream.iterate(0, x -> new Random().nextInt(99))
+                .limit(10)
+                .forEach(i -> {
+                    int type = (i & 1) == 0 ? 1 : 2;
+                    //根据分表字段自动查找
+                    Person person = personMapper.selectOne(
+                            Wrappers.<Person>lambdaQuery()
+                                    .eq(Person::getId, i)
+                                    .eq(Person::getType, "type" + type));
+                    System.err.println(person);
+                });
 
+        // 分表字段涉及两个时无法使用单参数查询方法，必须保证sql中含有分表相关的字段
         Person person = personMapper.selectById(23);
     }
 
     @Test
     public void dateDemoMapperTest() {
+        //根据分表字段自动查找
         DateDemo dateDemo = dateDemoMapper.selectOne(
                 Wrappers.<DateDemo>lambdaQuery()
                         .eq(DateDemo::getId, 23));

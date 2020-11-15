@@ -3,11 +3,11 @@
 # ===================================================================
 config:
   db:
-    host: 39.108.61.221
+    host: xxx
     port: 3306
-    dbname: mbp_sharding_plugin
-    username: root
-    password: a17770060561
+    dbname: xxx
+    username: xxx
+    password: xxx
 
 # ===================================================================
 # Spring 配置

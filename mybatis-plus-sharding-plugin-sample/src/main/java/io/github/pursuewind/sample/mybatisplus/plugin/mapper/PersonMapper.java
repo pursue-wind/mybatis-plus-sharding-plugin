@@ -6,7 +6,7 @@ import io.github.pursuewind.sample.mybatisplus.plugin.domain.Person;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
- * @author Mireal
+ * @author Chan
  */
 @Mapper
 @TableSharding(tableName = "person", paramName = "id", prefixParam = "type", strategy = PersonShardingStrategy.class)
