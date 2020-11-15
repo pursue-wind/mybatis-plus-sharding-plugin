@@ -8,14 +8,13 @@
     <version>0.2</version>
     <name>mybatis-plus-sharding-plugin</name>
     <description>支持MyBatisPlus的分表插件</description>
-    <url>https://github.com/mirrormingzZ/mybatis-plus-sharding-plugin</url>
+    <url>https://github.com/pursue-wind/mybatis-plus-sharding-plugin</url>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <java.version>1.8</java.version>
-        <sonatypeOssDistMgmtSnapshotsUrl>https://oss.sonatype.org/content/repositories/snapshots/
-        </sonatypeOssDistMgmtSnapshotsUrl>
+        <sonatypeOssDistMgmtSnapshotsUrl>https://oss.sonatype.org/content/repositories/snapshots/</sonatypeOssDistMgmtSnapshotsUrl>
     </properties>
 
     <licenses>
@@ -33,9 +32,9 @@
         </developer>
     </developers>
     <scm>
-        <url>https://github.com/mirrormingzZ/mybatis-plus-sharding-plugin</url>
-        <connection>scm:git@github.com:mirrormingzZ/mybatis-plus-sharding-plugin.git</connection>
-        <developerConnection>scm:git@github.com:mirrormingzZ/mybatis-plus-sharding-plugin.git</developerConnection>
+        <url>https://github.com/pursue-wind/mybatis-plus-sharding-plugin</url>
+        <connection>scm:git@github.com:pursue-wind/mybatis-plus-sharding-plugin.git</connection>
+        <developerConnection>scm:git@github.com:pursue-wind/mybatis-plus-sharding-plugin.git</developerConnection>
     </scm>
 
     <distributionManagement>
