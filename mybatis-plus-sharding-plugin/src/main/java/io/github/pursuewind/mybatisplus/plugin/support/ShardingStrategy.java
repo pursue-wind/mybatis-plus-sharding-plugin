@@ -20,7 +20,7 @@ package io.github.pursuewind.mybatisplus.plugin.support;
 /**
  * 分表策略服务接口
  *
- * @author chen
+ * @author Chan
  */
 @FunctionalInterface
 public interface ShardingStrategy {

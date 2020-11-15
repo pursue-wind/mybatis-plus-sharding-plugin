@@ -23,7 +23,7 @@ import io.github.pursuewind.mybatisplus.plugin.support.ShardingStrategy;
  * 分表策略
  * Id 对 10 取模
  *
- * @author chen
+ * @author Chan
  */
 public class IdModTenStrategy implements ShardingStrategy {
 

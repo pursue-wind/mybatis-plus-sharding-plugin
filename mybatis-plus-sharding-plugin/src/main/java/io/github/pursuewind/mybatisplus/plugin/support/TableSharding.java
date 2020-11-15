@@ -25,7 +25,7 @@ import java.lang.annotation.Target;
 /**
  * 分表策略拦截
  *
- * @author chen
+ * @author Chan
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE})

@@ -20,7 +20,7 @@ package io.github.pursuewind.mybatisplus.plugin.support;
 import org.apache.ibatis.mapping.SqlCommandType;
 
 /**
- * @author chen
+ * @author Chan
  */
 @FunctionalInterface
 public interface FuncProcessor {

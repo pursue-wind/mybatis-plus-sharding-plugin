@@ -20,6 +20,9 @@ package io.github.pursuewind.mybatisplus.plugin.interceptor;
 import com.baomidou.mybatisplus.core.conditions.AbstractWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Constants;
 import com.google.common.base.CaseFormat;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import io.github.pursuewind.mybatisplus.plugin.support.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.executor.statement.StatementHandler;
@@ -35,16 +38,28 @@ import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 分表策略拦截
  *
- * @author chen
+ * @author Chan
  */
 @Component
 @Slf4j(topic = "分表拦截器")
 @Intercepts({@Signature(type = StatementHandler.class, method = "prepare", args = {Connection.class, Integer.class})})
 public class TableShardingInterceptor implements Interceptor {
+    private LoadingCache<String, String> cache = CacheBuilder.newBuilder()
+            .maximumSize(100)
+            .expireAfterWrite(60, TimeUnit.MINUTES)
+            .removalListener(removal -> log.info("[{} : {}] is evicted!", removal.getKey(), removal.getValue()))
+            .build(new CacheLoader<String, String>() {
+                @Override
+                public String load(String key) {
+                    // 若缓存中无需要的数据,会执行以下方法
+                    return null;
+                }
+            });
 
     /**
      * intercept
@@ -79,15 +94,6 @@ public class TableShardingInterceptor implements Interceptor {
     }
 
     /**
-     * setProperties
-     *
-     * @param arg0
-     */
-    @Override
-    public void setProperties(Properties arg0) {
-    }
-
-    /**
      * select update delete语句处理
      * <p>
      * obj: mybatis参数对象，可能为 list
@@ -99,6 +105,14 @@ public class TableShardingInterceptor implements Interceptor {
         final String prefixParam = sharding.prefixParam();
 
         AbstractWrapper trans = obj2Wrapper(obj);
+
+        // 缓存
+        String cacheKey = sql + trans.getParamNameValuePairs().toString();
+        String sqlFromCache = cache.getIfPresent(cacheKey);
+        if (null != sqlFromCache) {
+//            log.info("Find SQL in Cache -> {}:{}", cacheKey, sqlFromCache);
+            return sqlFromCache;
+        }
 
         // 如果含有表名参数，直接用于替换表名
         int idx = getParamIndex(sql, ShardingStrategy.TABLE_NAME);
@@ -130,8 +144,8 @@ public class TableShardingInterceptor implements Interceptor {
             TwoTuple<Object, Object> tuple = TwoTuple.of(paramVal, prefixVal);
             String tableName = shardingStrategy.getTableName(originTableName, tuple.getFirst(), tuple.getSecond());
             return sqlCommandType == SqlCommandType.UPDATE
-                    ? StringUtils.replaceOnce(sql, "UPDATE " + originTableName, "UPDATE  " + tableName)
-                    : StringUtils.replaceOnce(sql, "FROM " + originTableName, "FROM " + tableName);
+                    ? StringUtils.replaceOnce(sql, "UPDATE " + originTableName, "UPDATE  " + tableName, s -> cache.put(cacheKey, s))
+                    : StringUtils.replaceOnce(sql, "FROM " + originTableName, "FROM " + tableName, s -> cache.put(cacheKey, s));
         }
     };
     private FuncProcessor singleParamProcessor = (sqlCommandType, obj, sql, sharding, shardingStrategy) -> {
@@ -141,6 +155,15 @@ public class TableShardingInterceptor implements Interceptor {
         final String prefixParam = sharding.prefixParam();
 
         if (obj instanceof Integer || obj instanceof String) {
+
+            // 缓存
+            String cacheKey = sql + obj.toString();
+            String sqlFromCache = cache.getIfPresent(cacheKey);
+            if (null != sqlFromCache) {
+//                log.info("Find SQL in Cache -> {}:{}", cacheKey, sqlFromCache);
+                return sqlFromCache;
+            }
+
             // 找到分表字段在条件构造器中的位置，如果为 -1 ，则传参有错误
             int paramIndex = getParamIndex(sql, CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_UNDERSCORE, paramName));
             if (-1 == paramIndex) {
@@ -155,8 +178,8 @@ public class TableShardingInterceptor implements Interceptor {
             TwoTuple<Object, Object> tuple = TwoTuple.of(obj, null);
             String tableName = shardingStrategy.getTableName(originTableName, tuple.getFirst(), tuple.getSecond());
             return sqlCommandType == SqlCommandType.UPDATE
-                    ? StringUtils.replaceOnce(sql, "UPDATE " + originTableName, "UPDATE  " + tableName)
-                    : StringUtils.replaceOnce(sql, "FROM " + originTableName, "FROM " + tableName);
+                    ? StringUtils.replaceOnce(sql, "UPDATE " + originTableName, "UPDATE  " + tableName, s -> cache.put(cacheKey, s))
+                    : StringUtils.replaceOnce(sql, "FROM " + originTableName, "FROM " + tableName, s -> cache.put(cacheKey, s));
         } else {
             throw new RuntimeException("分表注解 prefixParam 不为空，SQL 必须要有" + prefixParam + "对应数据库的字段");
         }
@@ -170,6 +193,14 @@ public class TableShardingInterceptor implements Interceptor {
         final String originTableName = sharding.tableName();
         final String paramName = sharding.paramName();
         final String prefixParam = sharding.prefixParam();
+
+        // 缓存
+        String cacheKey = sql + obj.toString();
+        String sqlFromCache = cache.getIfPresent(cacheKey);
+        if (null != sqlFromCache) {
+//            log.info("Find SQL in Cache -> {}:{}", cacheKey, sqlFromCache);
+            return sqlFromCache;
+        }
 
         Field[] fields = obj.getClass().getDeclaredFields();
         TwoTuple<Object, Object> tuple = new TwoTuple<>();
@@ -196,7 +227,7 @@ public class TableShardingInterceptor implements Interceptor {
 
         // 根据策略得到表名
         String tableName = shardingStrategy.getTableName(originTableName, tuple.getFirst(), tuple.getSecond());
-        return StringUtils.replaceOnce(sql, originTableName, tableName);
+        return StringUtils.replaceOnce(sql, originTableName, tableName, s -> cache.put(cacheKey, s));
     };
 
     /**
@@ -229,7 +260,6 @@ public class TableShardingInterceptor implements Interceptor {
             if (shardingStrategy == null) {
                 return;
             }
-
             String newSql = originalSql;
             SqlCommandType sqlCommandType = (SqlCommandType) metaStatementHandler.getValue("delegate.parameterHandler.sqlCommandType");
             switch (sqlCommandType) {

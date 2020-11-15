@@ -1,11 +1,13 @@
-package io.github.pursuewind.sample.mybatisplus.plugin.mapper;
+package io.github.pursuewind.mybatisplus.plugin.interceptor;
 
 import io.github.pursuewind.mybatisplus.plugin.support.ShardingStrategy;
 
 import java.time.LocalDate;
 
 /**
- * @author Mireal
+ * 简单的时间策略 eg: sourceTableName_2020_11
+ *
+ * @author Chan
  */
 public class DateShardingStrategy implements ShardingStrategy {
     @Override

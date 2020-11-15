@@ -22,7 +22,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * @author chen
+ * @author Chan
  */
 @Data
 @NoArgsConstructor
