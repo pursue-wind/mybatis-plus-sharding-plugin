@@ -5,7 +5,7 @@
 
     <groupId>io.github.mirrormingzz</groupId>
     <artifactId>mybatis-plus-sharding-plugin</artifactId>
-    <version>0.2</version>
+    <version>0.3</version>
     <name>mybatis-plus-sharding-plugin</name>
     <description>支持MyBatisPlus的分表插件</description>
     <url>https://github.com/pursue-wind/mybatis-plus-sharding-plugin</url>
