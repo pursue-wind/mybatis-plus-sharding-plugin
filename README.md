@@ -6,7 +6,7 @@
 <dependency>
     <groupId>io.github.mirrormingzz</groupId>
     <artifactId>mybatis-plus-sharding-plugin</artifactId>
-    <version>0.2</version>
+    <version>0.3</version>
 </dependency>
 ```
 #### 使用  参考 mybatis-plus-sharding-plugin-sample 内代码
@@ -96,7 +96,7 @@ public void dateDemoMapperTest() {
     int ceshi1 = dateDemoMapper.insert(
             DateDemo.builder().id(233).name("ceshi").createTime(LocalDate.now()).build()
     );
-    // 没有有时间参数会根据时间参数找到表插入
+    // 没有时间参数会根据当前时间找到表插入
     // sql：INSERT INTO date_demo_2020_11 ( id, name ) VALUES ( ?, ? )
     int ceshi2 = dateDemoMapper.insert(
             DateDemo.builder().id(234).name("ceshi").build()
