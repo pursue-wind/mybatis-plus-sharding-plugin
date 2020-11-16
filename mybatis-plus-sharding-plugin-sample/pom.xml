@@ -12,7 +12,7 @@
     <groupId>cn.mirrorming</groupId>
     <artifactId>mybatis-plus-sharding-plugin-sample</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>test</name>
+    <name>mybatis-plus-sharding-plugin-sample</name>
     <description>Demo project for Spring Boot</description>
 
     <properties>
@@ -24,7 +24,7 @@
         <dependency>
             <groupId>io.github.mirrormingzz</groupId>
             <artifactId>mybatis-plus-sharding-plugin</artifactId>
-            <version>0.2</version>
+            <version>0.3</version>
         </dependency>
 
 

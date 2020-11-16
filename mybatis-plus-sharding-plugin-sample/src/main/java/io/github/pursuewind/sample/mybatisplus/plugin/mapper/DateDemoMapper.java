@@ -7,6 +7,6 @@ import io.github.pursuewind.sample.mybatisplus.plugin.domain.DateDemo;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-@TableSharding(tableName = "date_demo", paramName = "id", strategy = DateShardingStrategy.class)
+@TableSharding(tableName = "date_demo", paramName = "createTime", strategy = DateShardingStrategy.class)
 public interface DateDemoMapper extends BaseMapper<DateDemo> {
 }

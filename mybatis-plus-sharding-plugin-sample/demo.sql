@@ -22,6 +22,7 @@ DROP TABLE IF EXISTS `date_demo_2020_11`;
 CREATE TABLE `date_demo_2020_11`  (
   `id` int(11) NOT NULL COMMENT 'id',
   `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'name',
+  `create_time` datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 

@@ -53,13 +53,13 @@ public void userMapperTest() {
                 System.err.println(user);
             });
 
-    //根据分表字段自动查找
+    //根据分表字段自动查找，sql：SELECT id,name FROM user_3 WHERE id=?
     User user = userMapper.selectById(23);
     System.out.println(user);
 
+    // 根据固定参数 ShardingStrategy.TABLE_NAME 传入表名查找，sql：SELECT id,name FROM user_2 WHERE ('user_2' = 'user_2' AND name = 'name_22')
     User user2 = userMapper.selectOne(
             Wrappers.<User>query()
-                    // 根据固定参数传入表名查找
                     .eq(ShardingStrategy.TABLE_NAME, "user_2")
                     .eq("name", "name_22")
     );
@@ -83,19 +83,31 @@ public void personMapperTest() {
                 System.err.println(person);
             });
 
-    // 分表字段涉及两个时无法使用单参数查询方法，必须保证sql中含有分表相关的字段
+    // 分表字段涉及两个时无法使用单参数查询方法，必须保证sql中含有分表相关的字段，抛出异常
     Person person = personMapper.selectById(23);
 }
 ```
 
 ```java  
-    @Test
-    public void dateDemoMapperTest() {
-        //根据分表字段自动查找
-        DateDemo dateDemo = dateDemoMapper.selectOne(
-                Wrappers.<DateDemo>lambdaQuery()
-                        .eq(DateDemo::getId, 23));
-        System.out.println(dateDemo);
-    }
+@Test
+public void dateDemoMapperTest() {
+    // 有时间参数会根据时间参数找到表插入
+    // sql：INSERT INTO date_demo_2020_11 ( id, name ) VALUES ( ?, ? )
+    int ceshi1 = dateDemoMapper.insert(
+            DateDemo.builder().id(233).name("ceshi").createTime(LocalDate.now()).build()
+    );
+    // 没有有时间参数会根据时间参数找到表插入
+    // sql：INSERT INTO date_demo_2020_11 ( id, name ) VALUES ( ?, ? )
+    int ceshi2 = dateDemoMapper.insert(
+            DateDemo.builder().id(234).name("ceshi").build()
+    );
+    //根据分表字段自动查找
+    // sql: SELECT id,name,create_time FROM date_demo_2020_11 WHERE (create_time = ?)
+    DateDemo dateDemo = dateDemoMapper.selectOne(
+            Wrappers.<DateDemo>lambdaQuery()
+                    .eq(DateDemo::getCreateTime, LocalDate.now()));
+
+    System.out.println(dateDemo);
+}
 ```
 
