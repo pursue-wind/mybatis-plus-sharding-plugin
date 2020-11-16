@@ -9,8 +9,14 @@
     <version>0.3</version>
 </dependency>
 ```
-#### 使用  参考 mybatis-plus-sharding-plugin-sample 内代码
 
+#### 使用  参考 mybatis-plus-sharding-plugin-sample 内代码
+```java
+    @Bean
+    public TableShardingInterceptor mybatisPlusShardingPlugin() {
+        return new TableShardingInterceptor();
+    }
+```
 ```java
 // 在Mapper上加上注解
 @TableSharding(tableName = "person", paramName = "id", prefixParam = "type", strategy = PersonShardingStrategy.class)
