@@ -52,28 +52,55 @@ public class TestCase {
                 });
     }
 
+    @Test
+    public void testCRUD() {
+        userMapper.insert(User.builder().id(2).name("name" + 2).build());
+        User id = userMapper.selectOne(Wrappers.<User>query().eq("id", 2));
+        System.out.println(id);
+        userMapper.update(User.builder().name("name233").build(),
+                Wrappers.<User>update().eq("id", 2));
+        User id2 = userMapper.selectOne(Wrappers.<User>query().eq("id", 2));
+        System.out.println(id2);
+        userMapper.delete(Wrappers.<User>update().eq("id", 2));
+
+
+    }
+
+    @Test
+    public void testSelectInData() {
+        User selectOne = userMapper.selectOne(Wrappers.<User>query().in("id", 2, 3, 4));
+    }
+
 
     @Test
     public void userMapperTest() {
-        Stream.iterate(0, x -> new Random().nextInt(99))
-                .limit(10)
-                .forEach(i -> {
-                    //根据分表字段自动查找
-                    User user = userMapper.selectOne(Wrappers.<User>lambdaQuery().eq(User::getId, i));
-                    System.err.println(user);
-                });
+//        Stream.iterate(0, x -> new Random().nextInt(99))
+//                .limit(10)
+//                .forEach(i -> {
+//                    //根据分表字段自动查找
+//                    User user = userMapper.selectOne(Wrappers.<User>lambdaQuery().eq(User::getId, i));
+//                    System.err.println(user);
+//                });
+
+        User user4 = userMapper.selectOne(Wrappers.<User>query().eq("id", 22).in("id", 23, 24, 25));
+        System.err.println(user4);
 
         //根据分表字段自动查找，sql：SELECT id,name FROM user_3 WHERE id=?
         User user = userMapper.selectById(23);
         System.out.println(user);
 
-        // 根据固定参数 ShardingStrategy.TABLE_NAME 传入表名查找，sql：SELECT id,name FROM user_2 WHERE ('user_2' = 'user_2' AND name = 'name_22')
-        User user2 = userMapper.selectOne(
-                Wrappers.<User>query()
-                        .eq(ShardingStrategy.TABLE_NAME, "user_2")
-                        .eq("name", "name_22")
-        );
-        System.out.println(user2);
+//        // 根据固定参数 ShardingStrategy.TABLE_NAME 传入表名查找，sql：SELECT id,name FROM user_2 WHERE ('user_2' = 'user_2' AND name = 'name_22')
+//        User user2 = userMapper.selectOne(
+//                Wrappers.<User>query()
+//                        .eq(ShardingStrategy.TABLE_NAME, "user_2")
+//                        .eq("name", "name_22")
+//        );
+//        System.out.println(user2);
+
+
+        User user3 = userMapper.selectOne(Wrappers.<User>lambdaQuery().eq(User::getId, 22));
+        System.err.println(user3);
+
     }
 
     @Test

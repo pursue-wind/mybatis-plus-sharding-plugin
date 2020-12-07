@@ -1,55 +1,48 @@
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package io.github.pursuewind.mybatisplus.plugin.interceptor;
 
 import com.baomidou.mybatisplus.core.conditions.AbstractWrapper;
+import com.baomidou.mybatisplus.core.plugins.InterceptorIgnoreHelper;
 import com.baomidou.mybatisplus.core.toolkit.Constants;
+import com.baomidou.mybatisplus.core.toolkit.PluginUtils;
+import com.baomidou.mybatisplus.extension.plugins.inner.InnerInterceptor;
 import com.google.common.base.CaseFormat;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import io.github.pursuewind.mybatisplus.plugin.support.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.ibatis.executor.Executor;
+import org.apache.ibatis.executor.parameter.ParameterHandler;
 import org.apache.ibatis.executor.statement.StatementHandler;
+import org.apache.ibatis.mapping.BoundSql;
 import org.apache.ibatis.mapping.MappedStatement;
 import org.apache.ibatis.mapping.SqlCommandType;
-import org.apache.ibatis.plugin.*;
-import org.apache.ibatis.reflection.DefaultReflectorFactory;
 import org.apache.ibatis.reflection.MetaObject;
-import org.apache.ibatis.reflection.SystemMetaObject;
-import org.springframework.stereotype.Component;
+import org.apache.ibatis.session.Configuration;
+import org.apache.ibatis.session.ResultHandler;
+import org.apache.ibatis.session.RowBounds;
 
 import java.lang.reflect.Field;
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 分表策略拦截
- *
  * @author Chan
  */
-//@Component
-@Deprecated
-@Slf4j(topic = "分表拦截器")
-@Intercepts({@Signature(type = StatementHandler.class, method = "prepare", args = {Connection.class, Integer.class})})
-public class TableShardingInterceptor implements Interceptor {
+@Slf4j
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@SuppressWarnings({"rawtypes"})
+public class TableShardingInnerInterceptor implements InnerInterceptor {
+
     private LoadingCache<String, String> cache = CacheBuilder.newBuilder()
             .maximumSize(100)
             .expireAfterWrite(60, TimeUnit.MINUTES)
@@ -62,36 +55,77 @@ public class TableShardingInterceptor implements Interceptor {
                 }
             });
 
-    /**
-     * intercept
-     *
-     * @param invocation
-     * @return
-     * @exception Throwable
-     */
+    @SneakyThrows
     @Override
-    public Object intercept(Invocation invocation) throws Throwable {
-        StatementHandler statementHandler = (StatementHandler) invocation.getTarget();
-        MetaObject metaStatementHandler = MetaObject.forObject(
-                statementHandler, SystemMetaObject.DEFAULT_OBJECT_FACTORY,
-                SystemMetaObject.DEFAULT_OBJECT_WRAPPER_FACTORY,
-                new DefaultReflectorFactory());
-
-        Object parameterObject = metaStatementHandler.getValue("delegate.boundSql.parameterObject");
-        doSharding(metaStatementHandler, parameterObject);
-        // 给下一个拦截器处理
-        return invocation.proceed();
+    public void beforeQuery(Executor executor,
+                            MappedStatement ms,
+                            Object param,
+                            RowBounds rowBounds,
+                            ResultHandler resultHandler,
+                            BoundSql boundSql) {
+//        PluginUtils.MPBoundSql mpBs = PluginUtils.mpBoundSql(boundSql);
+//        doSharding(ms, param, boundSql, mpBs);
     }
 
-    /**
-     * plugin
-     *
-     * @param arg0
-     * @return
-     */
+    @SneakyThrows
     @Override
-    public Object plugin(Object arg0) {
-        return arg0 instanceof StatementHandler ? Plugin.wrap(arg0, this) : arg0;
+    public void beforePrepare(StatementHandler sh, Connection connection, Integer transactionTimeout) {
+        PluginUtils.MPStatementHandler mpSh = PluginUtils.mpStatementHandler(sh);
+        MappedStatement ms = mpSh.mappedStatement();
+        ParameterHandler parameterHandler = mpSh.parameterHandler();
+        BoundSql boundSql = mpSh.boundSql();
+        PluginUtils.MPBoundSql mpBs = PluginUtils.mpBoundSql(boundSql);
+        doSharding(ms, parameterHandler.getParameterObject(), boundSql, mpBs);
+    }
+
+    private void doSharding(MappedStatement ms,
+                            Object param,
+                            BoundSql boundSql,
+                            PluginUtils.MPBoundSql mpBs)
+            throws ClassNotFoundException {
+        String originalSql = boundSql.getSql();
+        String id = ms.getId();
+        String className = id.substring(0, id.lastIndexOf("."));
+        Class<?> classObj = Class.forName(className);
+        // 根据配置自动生成分表SQL
+        TableSharding sharding = classObj.getAnnotation(TableSharding.class);
+        if (sharding == null) {
+            return;
+        }
+        // 获取注解上面的表名、参数名字和策略
+        Class<? extends ShardingStrategy> strategy = sharding.strategy();
+        ShardingStrategy shardingStrategy = null;
+        try {
+            shardingStrategy = (ShardingStrategy) Class.forName(strategy.getName()).newInstance();
+        } catch (InstantiationException | IllegalAccessException | ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+        if (shardingStrategy == null) {
+            return;
+        }
+        String newSql = originalSql;
+        SqlCommandType sqlCommandType = ms.getSqlCommandType();
+        switch (sqlCommandType) {
+            case INSERT:
+                newSql = cProcessor.proccessor(sqlCommandType, param, originalSql, sharding, shardingStrategy);
+                break;
+            case SELECT:
+            case UPDATE:
+            case DELETE:
+                if (param instanceof Map) {
+                    newSql = rudProcessor.proccessor(sqlCommandType, param, originalSql, sharding, shardingStrategy);
+                } else {
+                    newSql = singleParamProcessor.proccessor(sqlCommandType, param, originalSql, sharding, shardingStrategy);
+                }
+                break;
+            default:
+                // do nothing
+                break;
+        }
+
+        log.info("NEW SQL：" + newSql);
+        // 设置新sql
+        mpBs.sql(newSql);
     }
 
     /**
@@ -111,7 +145,7 @@ public class TableShardingInterceptor implements Interceptor {
         String cacheKey = sql + trans.getParamNameValuePairs().toString();
         String sqlFromCache = cache.getIfPresent(cacheKey);
         if (null != sqlFromCache) {
-//            log.info("Find SQL in Cache -> {}:{}", cacheKey, sqlFromCache);
+            log.debug("Find SQL in Cache -> {}:{}", cacheKey, sqlFromCache);
             return sqlFromCache;
         }
 
@@ -161,7 +195,7 @@ public class TableShardingInterceptor implements Interceptor {
             String cacheKey = sql + obj.toString();
             String sqlFromCache = cache.getIfPresent(cacheKey);
             if (null != sqlFromCache) {
-//                log.info("Find SQL in Cache -> {}:{}", cacheKey, sqlFromCache);
+                log.debug("Find SQL in Cache -> {}:{}", cacheKey, sqlFromCache);
                 return sqlFromCache;
             }
 
@@ -230,63 +264,6 @@ public class TableShardingInterceptor implements Interceptor {
         String tableName = shardingStrategy.getTableName(originTableName, tuple.getFirst(), tuple.getSecond());
         return StringUtils.replaceOnce(sql, originTableName, tableName, s -> cache.put(cacheKey, s));
     };
-
-    /**
-     * 分表处理
-     *
-     * @param metaStatementHandler MetaObject
-     * @param param                Object
-     * @exception ClassNotFoundException
-     */
-    private void doSharding(MetaObject metaStatementHandler, Object param) throws ClassNotFoundException {
-        String originalSql = (String) metaStatementHandler.getValue("delegate.boundSql.sql");
-        if (!StringUtils.isEmpty(originalSql)) {
-            MappedStatement mappedStatement = (MappedStatement) metaStatementHandler.getValue("delegate.mappedStatement");
-            String id = mappedStatement.getId();
-            String className = id.substring(0, id.lastIndexOf("."));
-            Class<?> classObj = Class.forName(className);
-            // 根据配置自动生成分表SQL
-            TableSharding sharding = classObj.getAnnotation(TableSharding.class);
-            if (sharding == null) {
-                return;
-            }
-            // 获取注解上面的表名、参数名字和策略
-            Class<? extends ShardingStrategy> strategy = sharding.strategy();
-            ShardingStrategy shardingStrategy = null;
-            try {
-                shardingStrategy = (ShardingStrategy) Class.forName(strategy.getName()).newInstance();
-            } catch (InstantiationException | IllegalAccessException | ClassNotFoundException e) {
-                e.printStackTrace();
-            }
-            if (shardingStrategy == null) {
-                return;
-            }
-            String newSql = originalSql;
-            SqlCommandType sqlCommandType = (SqlCommandType) metaStatementHandler.getValue("delegate.parameterHandler.sqlCommandType");
-            switch (sqlCommandType) {
-                case INSERT:
-                    newSql = cProcessor.proccessor(sqlCommandType, param, originalSql, sharding, shardingStrategy);
-                    break;
-                case SELECT:
-                case UPDATE:
-                case DELETE:
-                    if (param instanceof Map) {
-                        newSql = rudProcessor.proccessor(sqlCommandType, param, originalSql, sharding, shardingStrategy);
-                    } else {
-                        newSql = singleParamProcessor.proccessor(sqlCommandType, param, originalSql, sharding, shardingStrategy);
-                    }
-                    break;
-                default:
-                    // do nothing
-                    break;
-            }
-
-            log.info("NEW SQL：" + newSql);
-            // 设置新sql
-            metaStatementHandler.setValue("delegate.boundSql.sql", newSql);
-        }
-    }
-
 
     /**
      * 根据位置取出当初传入条件构造器的值

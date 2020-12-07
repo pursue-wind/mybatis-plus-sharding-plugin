@@ -30,24 +30,16 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE})
 public @interface TableSharding {
-    
-    /**
-     * 分表的表名
-     */
+
+    /** 分表的表名 */
     String tableName();
 
-    /**
-     * 分表的依据的字段
-     */
+    /** 分表的依据的字段 */
     String paramName();
 
-    /**
-     * 表前缀策略依据的字段，默认空串不处理
-     */
+    /** 表前缀策略依据的字段，默认空串不处理 */
     String prefixParam() default "";
 
-    /**
-     * 分表规则
-     */
+    /** 分表规则 */
     Class<? extends ShardingStrategy> strategy();
 }
