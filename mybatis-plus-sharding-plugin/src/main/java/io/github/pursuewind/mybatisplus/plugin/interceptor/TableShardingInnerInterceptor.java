@@ -1,37 +1,25 @@
 package io.github.pursuewind.mybatisplus.plugin.interceptor;
 
 import com.baomidou.mybatisplus.core.conditions.AbstractWrapper;
-import com.baomidou.mybatisplus.core.plugins.InterceptorIgnoreHelper;
 import com.baomidou.mybatisplus.core.toolkit.Constants;
 import com.baomidou.mybatisplus.core.toolkit.PluginUtils;
+import com.baomidou.mybatisplus.core.toolkit.TableNameParser;
 import com.baomidou.mybatisplus.extension.plugins.inner.InnerInterceptor;
 import com.google.common.base.CaseFormat;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
 import io.github.pursuewind.mybatisplus.plugin.support.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.SneakyThrows;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.ibatis.executor.Executor;
 import org.apache.ibatis.executor.parameter.ParameterHandler;
 import org.apache.ibatis.executor.statement.StatementHandler;
 import org.apache.ibatis.mapping.BoundSql;
 import org.apache.ibatis.mapping.MappedStatement;
 import org.apache.ibatis.mapping.SqlCommandType;
-import org.apache.ibatis.reflection.MetaObject;
-import org.apache.ibatis.session.Configuration;
-import org.apache.ibatis.session.ResultHandler;
-import org.apache.ibatis.session.RowBounds;
 
 import java.lang.reflect.Field;
 import java.sql.Connection;
-import java.sql.SQLException;
-import java.util.Map;
-import java.util.Properties;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 /**
  * @author Chan
@@ -39,230 +27,114 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @Data
 @NoArgsConstructor
-@AllArgsConstructor
 @SuppressWarnings({"rawtypes"})
 public class TableShardingInnerInterceptor implements InnerInterceptor {
+    private HashMap<String, Sharding> shardingStrategyMap = new HashMap<>(32);
 
-    private LoadingCache<String, String> cache = CacheBuilder.newBuilder()
-            .maximumSize(100)
-            .expireAfterWrite(60, TimeUnit.MINUTES)
-            .removalListener(removal -> log.info("[{} : {}] is evicted!", removal.getKey(), removal.getValue()))
-            .build(new CacheLoader<String, String>() {
-                @Override
-                public String load(String key) {
-                    // 若缓存中无需要的数据,会执行以下方法
-                    return null;
-                }
-            });
-
-    @SneakyThrows
-    @Override
-    public void beforeQuery(Executor executor,
-                            MappedStatement ms,
-                            Object param,
-                            RowBounds rowBounds,
-                            ResultHandler resultHandler,
-                            BoundSql boundSql) {
-//        PluginUtils.MPBoundSql mpBs = PluginUtils.mpBoundSql(boundSql);
-//        doSharding(ms, param, boundSql, mpBs);
+    public TableShardingInnerInterceptor with(Sharding sharding) {
+        shardingStrategyMap.put(sharding.getTableName(), sharding);
+        return this;
     }
 
     @SneakyThrows
     @Override
     public void beforePrepare(StatementHandler sh, Connection connection, Integer transactionTimeout) {
         PluginUtils.MPStatementHandler mpSh = PluginUtils.mpStatementHandler(sh);
-        MappedStatement ms = mpSh.mappedStatement();
+
+        MappedStatement mappedStatement = mpSh.mappedStatement();
         ParameterHandler parameterHandler = mpSh.parameterHandler();
         BoundSql boundSql = mpSh.boundSql();
         PluginUtils.MPBoundSql mpBs = PluginUtils.mpBoundSql(boundSql);
-        doSharding(ms, parameterHandler.getParameterObject(), boundSql, mpBs);
+        Object parameterObject = parameterHandler.getParameterObject();
+
+        doSharding(mappedStatement, parameterObject, boundSql, mpBs);
     }
 
-    private void doSharding(MappedStatement ms,
-                            Object param,
-                            BoundSql boundSql,
-                            PluginUtils.MPBoundSql mpBs)
-            throws ClassNotFoundException {
+    private void doSharding(MappedStatement ms, Object obj, BoundSql boundSql, PluginUtils.MPBoundSql mpBs) {
         String originalSql = boundSql.getSql();
-        String id = ms.getId();
-        String className = id.substring(0, id.lastIndexOf("."));
-        Class<?> classObj = Class.forName(className);
-        // 根据配置自动生成分表SQL
-        TableSharding sharding = classObj.getAnnotation(TableSharding.class);
-        if (sharding == null) {
-            return;
-        }
-        // 获取注解上面的表名、参数名字和策略
-        Class<? extends ShardingStrategy> strategy = sharding.strategy();
-        ShardingStrategy shardingStrategy = null;
-        try {
-            shardingStrategy = (ShardingStrategy) Class.forName(strategy.getName()).newInstance();
-        } catch (InstantiationException | IllegalAccessException | ClassNotFoundException e) {
-            e.printStackTrace();
-        }
-        if (shardingStrategy == null) {
-            return;
-        }
-        String newSql = originalSql;
-        SqlCommandType sqlCommandType = ms.getSqlCommandType();
-        switch (sqlCommandType) {
-            case INSERT:
-                newSql = cProcessor.proccessor(sqlCommandType, param, originalSql, sharding, shardingStrategy);
-                break;
-            case SELECT:
-            case UPDATE:
-            case DELETE:
-                if (param instanceof Map) {
-                    newSql = rudProcessor.proccessor(sqlCommandType, param, originalSql, sharding, shardingStrategy);
-                } else {
-                    newSql = singleParamProcessor.proccessor(sqlCommandType, param, originalSql, sharding, shardingStrategy);
-                }
-                break;
-            default:
-                // do nothing
-                break;
-        }
 
-        log.info("NEW SQL：" + newSql);
-        // 设置新sql
-        mpBs.sql(newSql);
+        TableNameParser parser = new TableNameParser(originalSql);
+
+        Collection<String> tables = parser.tables();
+
+        if (1 == tables.size()) {
+            tables.stream()
+                    .filter(table -> shardingStrategyMap.containsKey(table))
+                    .findFirst()
+                    .ifPresent(originTableName -> {
+                        Sharding sharding = shardingStrategyMap.get(originTableName);
+                        final SqlCommandType sqlCommandType = ms.getSqlCommandType();
+                        if (sqlCommandType == SqlCommandType.INSERT) {
+                            String newSql = cHandler.handler(sqlCommandType, obj, originalSql, sharding);
+                            mpBs.sql(newSql);
+                        } else if (sqlCommandType == SqlCommandType.SELECT || sqlCommandType == SqlCommandType.UPDATE || sqlCommandType == SqlCommandType.DELETE) {
+                            String newSql = rudHandler.handler(sqlCommandType, obj, originalSql, sharding);
+                            mpBs.sql(newSql);
+                        }
+                    });
+        }
     }
 
-    /**
-     * select update delete语句处理
-     * <p>
-     * obj: mybatis参数对象，可能为 list
-     */
-    private FuncProcessor rudProcessor = (sqlCommandType, obj, sql, sharding, shardingStrategy) -> {
-        // 获取注解上面的表名、参数名字和策略
-        final String originTableName = sharding.tableName();
-        final String paramName = sharding.paramName();
-        final String prefixParam = sharding.prefixParam();
-
-        AbstractWrapper trans = obj2Wrapper(obj);
-
-        // 缓存
-        String cacheKey = sql + trans.getParamNameValuePairs().toString();
-        String sqlFromCache = cache.getIfPresent(cacheKey);
-        if (null != sqlFromCache) {
-            log.debug("Find SQL in Cache -> {}:{}", cacheKey, sqlFromCache);
-            return sqlFromCache;
-        }
-
-        // 如果含有表名参数，直接用于替换表名
-        int idx = getParamIndex(sql, ShardingStrategy.TABLE_NAME);
-        if (idx != -1) {
-            String newTableName = String.valueOf(getParamVal(trans, idx));
-            String newSql = StringUtils.replaceOnce(sql, originTableName, newTableName);
-            if (newSql.contains(ShardingStrategy.TABLE_NAME + " = ?")) {
-                newSql = StringUtils.replaceOnce(newSql, ShardingStrategy.TABLE_NAME + " = ?", "'" + newTableName + "' = ?");
-            }
-            return newSql;
-        }
-        // 没有表名参数，查询条件构造器中的分表字段和前缀字段
-        else {
-            // 找到分表字段在条件构造器中的位置，如果为 -1 ，则传参有错误
-            int paramIndex = getParamIndex(sql, CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_UNDERSCORE, paramName));
-            if (-1 == paramIndex) {
-                throw new RuntimeException("分表注解，条件构建器中必须要有" + paramName + "对应数据库的字段");
-            }
-
-            Object paramVal = getParamVal(trans, paramIndex);
-            Object prefixVal = "";
-            if (!StringUtils.isEmpty(prefixParam)) {
-                int prefixParamIndex = getParamIndex(sql, CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_UNDERSCORE, prefixParam));
-                if (-1 == prefixParamIndex) {
-                    throw new RuntimeException("分表注解 prefixParam 不为空，条件构建器中必须要有" + prefixParam + "对应数据库的字段");
-                }
-                prefixVal = getParamVal(trans, prefixParamIndex);
-            }
-            TwoTuple<Object, Object> tuple = TwoTuple.of(paramVal, prefixVal);
-            String tableName = shardingStrategy.getTableName(originTableName, tuple.getFirst(), tuple.getSecond());
-            return sqlCommandType == SqlCommandType.UPDATE
-                    ? StringUtils.replaceOnce(sql, "UPDATE " + originTableName, "UPDATE  " + tableName, s -> cache.put(cacheKey, s))
-                    : StringUtils.replaceOnce(sql, "FROM " + originTableName, "FROM " + tableName, s -> cache.put(cacheKey, s));
-        }
-    };
-    private FuncProcessor singleParamProcessor = (sqlCommandType, obj, sql, sharding, shardingStrategy) -> {
-        // 获取注解上面的表名、参数名字和策略
-        final String originTableName = sharding.tableName();
-        final String paramName = sharding.paramName();
-        final String prefixParam = sharding.prefixParam();
-
-        if (obj instanceof Integer || obj instanceof String) {
-
-            // 缓存
-            String cacheKey = sql + obj.toString();
-            String sqlFromCache = cache.getIfPresent(cacheKey);
-            if (null != sqlFromCache) {
-                log.debug("Find SQL in Cache -> {}:{}", cacheKey, sqlFromCache);
-                return sqlFromCache;
-            }
-
-            // 找到分表字段在条件构造器中的位置，如果为 -1 ，则传参有错误
-            int paramIndex = getParamIndex(sql, CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_UNDERSCORE, paramName));
-            if (-1 == paramIndex) {
-                throw new RuntimeException("分表注解，条件构建器中必须要有" + paramName + "对应数据库的字段");
-            }
-            if (!StringUtils.isEmpty(prefixParam)) {
-                int prefixParamIndex = getParamIndex(sql, CaseFormat.LOWER_CAMEL.to(CaseFormat.LOWER_UNDERSCORE, prefixParam));
-                if (-1 == prefixParamIndex) {
-                    throw new RuntimeException("分表注解 prefixParam 不为空，条件构建器中必须要有" + prefixParam + "对应数据库的字段");
-                }
-            }
-            TwoTuple<Object, Object> tuple = TwoTuple.of(obj, null);
-            String tableName = shardingStrategy.getTableName(originTableName, tuple.getFirst(), tuple.getSecond());
-            return sqlCommandType == SqlCommandType.UPDATE
-                    ? StringUtils.replaceOnce(sql, "UPDATE " + originTableName, "UPDATE  " + tableName, s -> cache.put(cacheKey, s))
-                    : StringUtils.replaceOnce(sql, "FROM " + originTableName, "FROM " + tableName, s -> cache.put(cacheKey, s));
-        } else {
-            throw new RuntimeException("分表注解 prefixParam 不为空，SQL 必须要有" + prefixParam + "对应数据库的字段");
-        }
-    };
-
-    /**
-     * insert 语句处理 obj此时为插入的对象，从对象中取出对应的值
-     */
-    private FuncProcessor cProcessor = (sqlCommandType, obj, sql, sharding, shardingStrategy) -> {
-        // 获取注解上面的表名、参数名字和策略
-        final String originTableName = sharding.tableName();
-        final String paramName = sharding.paramName();
-        final String prefixParam = sharding.prefixParam();
-
-        // 缓存
-        String cacheKey = sql + obj.toString();
-        String sqlFromCache = cache.getIfPresent(cacheKey);
-        if (null != sqlFromCache) {
-//            log.info("Find SQL in Cache -> {}:{}", cacheKey, sqlFromCache);
-            return sqlFromCache;
-        }
-
+    SqlHandler cHandler = (sqlCommandType, obj, originalSql, sharding) -> {
+        // 表名、参数名字和策略
+        final String originTableName = sharding.getTableName();
+        final String paramName = CaseFormat.LOWER_UNDERSCORE.to(CaseFormat.LOWER_CAMEL, sharding.getShardingParam());
+        final BiFunction<String, Object, String> tableNameProcessor = sharding.getTableNameProcessor();
         Field[] fields = obj.getClass().getDeclaredFields();
-        TwoTuple<Object, Object> tuple = new TwoTuple<>();
         // 反射获得参数值
         for (Field field : fields) {
             field.setAccessible(true);
             if (field.getName().equals(paramName)) {
                 try {
-                    tuple.setFirst(field.get(obj));
+                    // 得到表名
+                    String newTableName = tableNameProcessor.apply(originTableName, field.get(obj));
+                    log.info("newTableName:{}", newTableName);
+                    return StringUtils.replaceOnce(originalSql, originTableName, newTableName);
                 } catch (IllegalArgumentException | IllegalAccessException e) {
                     e.printStackTrace();
-                }
-            }
-            if (!StringUtils.isEmpty(prefixParam)) {
-                if (field.getName().equals(prefixParam)) {
-                    try {
-                        tuple.setSecond(field.get(obj));
-                    } catch (IllegalArgumentException | IllegalAccessException e) {
-                        e.printStackTrace();
-                    }
+                    throw new RuntimeException();
                 }
             }
         }
+        throw new RuntimeException();
+    };
 
-        // 根据策略得到表名
-        String tableName = shardingStrategy.getTableName(originTableName, tuple.getFirst(), tuple.getSecond());
-        return StringUtils.replaceOnce(sql, originTableName, tableName, s -> cache.put(cacheKey, s));
+    SqlHandler rudHandler = (sqlCommandType, obj, originalSql, sharding) -> {
+        // 表名、参数名字和策略
+        final String originalTableName = sharding.getTableName();
+        final String paramName = sharding.getShardingParam();
+        final BiFunction<String, Object, String> tableNameProcessor = sharding.getTableNameProcessor();
+        if (obj instanceof Map) {
+            AbstractWrapper trans = obj2Wrapper(obj);
+            // 找到分表字段在条件构造器中的位置，如果为 -1 ，则传参有错误
+            int paramIndex = getParamIndex(originalSql, paramName);
+            if (-1 == paramIndex) {
+                throw new RuntimeException("分表注解，条件构建器中必须要有" + paramName + "对应数据库的字段");
+            }
+            Object paramVal = getParamVal(trans, paramIndex);
+            String newTableName = tableNameProcessor.apply(originalTableName, paramVal);
+            return sqlCommandType == SqlCommandType.UPDATE
+                    ? StringUtils.replaceOnce(originalSql, "UPDATE " + originalTableName, "UPDATE  " + newTableName)
+                    : StringUtils.replaceOnce(originalSql, "FROM " + originalTableName, "FROM " + newTableName);
+        } else {
+            // 处理单参数方法
+            if (obj instanceof Integer || obj instanceof String) {
+
+                // 找到分表字段在条件构造器中的位置，如果为 -1 ，则传参有错误
+                int paramIndex = getParamIndex(originalSql, paramName);
+                if (-1 == paramIndex) {
+                    throw new RuntimeException("分表注解，条件构建器中必须要有" + paramName + "对应数据库的字段");
+                }
+
+                String newTableName = tableNameProcessor.apply(originalTableName, obj);
+                log.info("newTableName:{}", newTableName);
+                return sqlCommandType == SqlCommandType.UPDATE
+                        ? StringUtils.replaceOnce(originalSql, "UPDATE " + originalTableName, "UPDATE  " + newTableName)
+                        : StringUtils.replaceOnce(originalSql, "FROM " + originalTableName, "FROM " + newTableName);
+            } else {
+                throw new RuntimeException();
+            }
+        }
     };
 
     /**
@@ -328,5 +200,35 @@ public class TableShardingInnerInterceptor implements InnerInterceptor {
             }
         }
         return null;
+    }
+
+    @FunctionalInterface
+    public interface SqlHandler {
+        /**
+         * 针对不同 SqlCommandType 作对应的处理
+         *
+         * @param sqlCommandType {@link SqlCommandType}
+         * @param obj            mybatis 接口方法传入的对象，insert时为数据库的entity 查询修改时可能为列表参数
+         * @param sql            原始sql
+         * @return newSql
+         */
+        String handler(SqlCommandType sqlCommandType, Object obj, String sql, TableShardingInnerInterceptor.Sharding sharding);
+    }
+
+    @Data
+    @AllArgsConstructor
+    @Builder
+    public static class Sharding {
+        /** 原表名 如：user */
+        private String tableName;
+        /** 分表参数 如：user_id */
+        private String shardingParam;
+        /**
+         * 原表名和分表参数的值处理，返回新表名
+         * <code>
+         * (tableName, paramVal) -> tableName + "_" + (int) paramVal % 10
+         * </code>
+         */
+        private BiFunction<String, Object, String> tableNameProcessor;
     }
 }

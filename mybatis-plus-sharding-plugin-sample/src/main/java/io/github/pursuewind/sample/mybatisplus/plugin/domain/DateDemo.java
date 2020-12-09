@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import java.io.Serializable;
 import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Date;
 
 import lombok.AllArgsConstructor;
@@ -45,7 +46,7 @@ public class DateDemo implements Serializable {
      * name
      */
     @TableField(value = "create_time")
-    private LocalDate createTime;
+    private LocalDateTime createTime;
 
     private static final long serialVersionUID = 1L;
 }
