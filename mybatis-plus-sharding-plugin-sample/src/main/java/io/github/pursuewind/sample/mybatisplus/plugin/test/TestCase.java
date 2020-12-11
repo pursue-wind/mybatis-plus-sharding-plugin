@@ -42,14 +42,38 @@ public class TestCase {
 
     @Test
     public void testCRUD() {
-        userMapper.insert(User.builder().id(2).name("name" + 2).build());
-        User id = userMapper.selectOne(Wrappers.<User>query().eq("id", 2));
+//        userMapper.insert(User.builder().id(2).name("name" + 2).build());
+        User id = userMapper.selectOne(Wrappers.<User>query().eq("id", 2).eq("name", "name2"));
         System.out.println(id);
         userMapper.update(User.builder().name("name233").build(),
                 Wrappers.<User>update().eq("id", 2));
         User id2 = userMapper.selectOne(Wrappers.<User>query().eq("id", 2));
         System.out.println(id2);
         userMapper.delete(Wrappers.<User>update().eq("id", 2));
+    }
+
+    @Test
+    public void testCRUD2() {
+        userMapper.deleteById(2);
+        userMapper.insert(User.builder().id(2).name("name" + 2).build());
+
+        User user = userMapper.selectById(2);
+        userMapper.deleteById(2);
+        User user2 = userMapper.selectById(2);
+        userMapper.insert(User.builder().id(2).name("name" + 2).build());
+        userMapper.update(User.builder().name("2333").build(), Wrappers.<User>update().eq("id", 2));
+        userMapper.delete(Wrappers.<User>query().eq("id", 2));
+//        User user = userMapper.selectByIdAndName(2,"name");
+//        User user =
+//        System.out.println(user);
+
+    }
+
+    @Test
+    public void testIn() {
+
+        userMapper.selectList(Wrappers.<User>query().in("xx_id", 2, 3, 4));
+
     }
 
     @Test
@@ -79,9 +103,9 @@ public class TestCase {
     public void dateDemoMapperTest() {
         // 有时间参数会根据时间参数找到表插入
         // sql：INSERT INTO date_demo_2020_11 ( id, name ) VALUES ( ?, ? )
-        int ceshi1 = dateDemoMapper.insert(
-                DateDemo.builder().id(239).name("ceshi").createTime(LocalDateTime.now()).build()
-        );
+//        int ceshi1 = dateDemoMapper.insert(
+//                DateDemo.builder().id(239).name("ceshi").createTime(LocalDateTime.now()).build()
+//        );
 
         //根据分表字段自动查找
         // sql: SELECT id,name,create_time FROM date_demo_2020_11 WHERE (create_time = ?)

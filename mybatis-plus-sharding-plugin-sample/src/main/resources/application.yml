@@ -3,11 +3,11 @@
 # ===================================================================
 config:
   db:
-    host: xxx
+    host: xx
     port: 3306
-    dbname: xxx
-    username: xxx
-    password: xxx
+    dbname: xx
+    username: x
+    password: xx
 
 # ===================================================================
 # Spring 配置
@@ -39,9 +39,12 @@ spring:
 # mybatis-plus 配置
 # ===================================================================
 mybatis-plus:
-  type-aliases-package: cn.mirrorming.blog.domain
+  type-aliases-package: io.github.pursuewind.sample.mybatisplus.plugin.domain
   mapper-locations: classpath:mapper/*.xml
   configuration:
     map-underscore-to-camel-case: true
     # 输出SQL
     log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  sharding:
+    user:
+      shardingStrategy: user_$ -> { id % 10 }

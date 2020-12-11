@@ -64,6 +64,9 @@ public class TableShardingInnerInterceptor implements InnerInterceptor {
                     .ifPresent(originTableName -> {
                         Sharding sharding = shardingStrategyMap.get(originTableName);
                         final SqlCommandType sqlCommandType = ms.getSqlCommandType();
+                        if (originalSql.contains(String.format("(%s IN (", sharding.getShardingParam()))) {
+                            //in
+                        }
                         if (sqlCommandType == SqlCommandType.INSERT) {
                             String newSql = cHandler.handler(sqlCommandType, obj, originalSql, sharding);
                             mpBs.sql(newSql);
@@ -109,7 +112,7 @@ public class TableShardingInnerInterceptor implements InnerInterceptor {
             // 找到分表字段在条件构造器中的位置，如果为 -1 ，则传参有错误
             int paramIndex = getParamIndex(originalSql, paramName);
             if (-1 == paramIndex) {
-                throw new RuntimeException("分表注解，条件构建器中必须要有" + paramName + "对应数据库的字段");
+                throw new RuntimeException("分表注解，条件构建器中必须要有" + paramName + "字段");
             }
             Object paramVal = getParamVal(trans, paramIndex);
             String newTableName = tableNameProcessor.apply(originalTableName, paramVal);
@@ -123,7 +126,7 @@ public class TableShardingInnerInterceptor implements InnerInterceptor {
                 // 找到分表字段在条件构造器中的位置，如果为 -1 ，则传参有错误
                 int paramIndex = getParamIndex(originalSql, paramName);
                 if (-1 == paramIndex) {
-                    throw new RuntimeException("分表注解，条件构建器中必须要有" + paramName + "对应数据库的字段");
+                    throw new RuntimeException("分表注解，条件构建器中必须要有" + paramName + "字段");
                 }
 
                 String newTableName = tableNameProcessor.apply(originalTableName, obj);
